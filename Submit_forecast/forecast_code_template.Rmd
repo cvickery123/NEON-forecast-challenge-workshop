@@ -136,40 +136,12 @@ for(i in 1:length(lake_sites$field_site_id)) {
 }
 ```
 ```{r make-standard}
-#visualizing forecast
-temp_lm_forecast_modified %>% 
-  filter(variable == 'temperature') %>%
-  ggplot(.,aes(x=datetime, y=prediction, group = parameter)) + 
-  geom_point(data = targets,aes(x=datetime, y=observation, group = 'obs'), colour = 'darkblue') +
-  geom_line(alpha = 0.3, aes(colour = 'ensemble member (parameter)')) + 
-  facet_wrap(~site_id, scales = 'free_y') +
-  scale_x_date(expand = c(0,0), date_labels = "%d %b") +
-  labs(y = 'value') +
-  geom_vline(aes(linetype = 'reference_datetime', xintercept = Sys.Date()), colour = 'blue', size = 1.5) +
-  labs(title = 'site_id', subtitle = 'variable = temperature', caption = 'prediction') + 
-  annotate("text", x = Sys.Date() - days(10), y = 20, label = "past")  +
-  annotate("text", x = Sys.Date() + days(12), y = 20, label = "future")  +
-  theme_bw() +
-  coord_cartesian(xlim = c(min(temp_lm_forecast$datetime) - 15,
-                           Sys.Date() + 30)) +
-  scale_linetype_manual(values = 'dashed', name = '') +
-  scale_colour_manual(values = 'darkgrey', name = '') +
-  theme(strip.text = element_text(colour = 'orange'),
-        axis.title.y = element_text(colour = 'green'),
-        axis.title.x = element_text(colour = 'red'),
-        axis.text.y = element_text(colour = 'purple'),
-        axis.text.x = element_text(colour = 'red'),
-        plot.caption = element_text(hjust = 0, colour = 'purple'),
-        plot.title = element_text(colour = 'orange'), 
-        plot.subtitle = element_text(colour = 'green')) 
-```
-```{r make-standard}
 # Make forecast fit the EFI standards
 # Remember to change the model_id when you make changes to the model structure!
 my_model_id <- 'example_ID_VickeryFirstForecast'
 
-temp_lm_forecast_EFI <- temp_lm_forecast %>%
-  filter(datetime > forecast_date) %>%
+temp_lm_forecast_EFI <- temp_lm_forecast_modified %>%
+  dplyr::filter(datetime > forecast_date) %>%
   mutate(model_id = my_model_id,
          reference_datetime = forecast_date,
          family = 'ensemble',
