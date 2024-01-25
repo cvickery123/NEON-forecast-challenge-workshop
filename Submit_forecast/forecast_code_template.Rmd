@@ -166,7 +166,7 @@ temp_lm_forecast_modified %>%
 ```{r make-standard}
 # Make forecast fit the EFI standards
 # Remember to change the model_id when you make changes to the model structure!
-my_model_id <- 'example_ID'
+my_model_id <- 'example_ID_VickeryFirstForecast'
 
 temp_lm_forecast_EFI <- temp_lm_forecast %>%
   filter(datetime > forecast_date) %>%
@@ -203,8 +203,7 @@ neon4cast::forecast_output_validator(file.path('Forecasts',forecast_file_1))
 ## # can uses the neon4cast::forecast_output_validator() to check the forecast is in the right format
 
 # UNCOMMMENT THIS WHEN YOU ARE READY TO SUBMIT
-## neon4cast::submit(forecast_file = file.path('Forecasts', forecast_file_1),
-##                   ask = FALSE) # if ask = T (default), it will produce a pop-up box asking if you want to submit
+neon4cast::submit(forecast_file = file.path('Forecasts', forecast_file_1),                   ask = T) # if ask = T (default), it will produce a pop-up box asking if you want to submit
 
 
 ```
