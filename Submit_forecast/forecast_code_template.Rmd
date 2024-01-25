@@ -72,7 +72,7 @@ forecast_date <- Sys.Date()
 noaa_date <- forecast_date - days(1)
 
 noaa_future_s3 <- neon4cast::noaa_stage2(start_date = as.character(noaa_date))
-variables <- c("air_temperature")
+variables <- c("air_temperature", "relative_humidity")
 
 noaa_future <- noaa_future_s3 |> 
   dplyr::filter(datetime >= forecast_date,
@@ -88,7 +88,8 @@ noaa_future_daily <- noaa_future |>
   pivot_wider(names_from = variable, values_from = prediction) |>
   # convert to Celsius
   mutate(air_temperature = air_temperature - 273.15) |> 
-  select(datetime, site_id, air_temperature, parameter)
+  select(datetime, site_id, air_temperature, relative_humidity, parameter)
+#view(noaa_future_daily)
 ```
 
 ```{r model-setup}
@@ -116,11 +117,11 @@ for(i in 1:length(lake_sites$field_site_id)) {
     filter(site_id == example_site)
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
-  fit <- lm(site_target$temperature ~ site_target$air_temperature)
-  # fit <- lm(site_target$temperature ~ ....)
+  #fit <- lm(site_target$temperature ~ site_target$air_temperature)
+  fit <- lm(site_target$temperature ~ site_target$air_temperature + site_target$relative_humidity)
     
   # use linear regression to forecast water temperature for each ensemble member
-  forecasted_temperature <- fit$coefficients[1] + fit$coefficients[2] * noaa_future_site$air_temperature
+  forecasted_temperature <- fit$coefficients[1] + fit$coefficients[2] * noaa_future_site$air_temperature + fit$coefficients[3] * noaa_future_site$relative_humidity
     
   # put all the relavent information into a tibble that we can bind together
   temperature <- tibble(datetime = noaa_future_site$datetime,
@@ -129,12 +130,39 @@ for(i in 1:length(lake_sites$field_site_id)) {
                         prediction = forecasted_temperature,
                         variable = "temperature")
   
-  temp_lm_forecast <- dplyr::bind_rows(temp_lm_forecast, temperature)
+  temp_lm_forecast_modified <- dplyr::bind_rows(temp_lm_forecast, temperature)
   message(example_site, ' temperature forecast run')
   
 }
 ```
-
+```{r make-standard}
+#visualizing forecast
+temp_lm_forecast_modified %>% 
+  filter(variable == 'temperature') %>%
+  ggplot(.,aes(x=datetime, y=prediction, group = parameter)) + 
+  geom_point(data = targets,aes(x=datetime, y=observation, group = 'obs'), colour = 'darkblue') +
+  geom_line(alpha = 0.3, aes(colour = 'ensemble member (parameter)')) + 
+  facet_wrap(~site_id, scales = 'free_y') +
+  scale_x_date(expand = c(0,0), date_labels = "%d %b") +
+  labs(y = 'value') +
+  geom_vline(aes(linetype = 'reference_datetime', xintercept = Sys.Date()), colour = 'blue', size = 1.5) +
+  labs(title = 'site_id', subtitle = 'variable = temperature', caption = 'prediction') + 
+  annotate("text", x = Sys.Date() - days(10), y = 20, label = "past")  +
+  annotate("text", x = Sys.Date() + days(12), y = 20, label = "future")  +
+  theme_bw() +
+  coord_cartesian(xlim = c(min(temp_lm_forecast$datetime) - 15,
+                           Sys.Date() + 30)) +
+  scale_linetype_manual(values = 'dashed', name = '') +
+  scale_colour_manual(values = 'darkgrey', name = '') +
+  theme(strip.text = element_text(colour = 'orange'),
+        axis.title.y = element_text(colour = 'green'),
+        axis.title.x = element_text(colour = 'red'),
+        axis.text.y = element_text(colour = 'purple'),
+        axis.text.x = element_text(colour = 'red'),
+        plot.caption = element_text(hjust = 0, colour = 'purple'),
+        plot.title = element_text(colour = 'orange'), 
+        plot.subtitle = element_text(colour = 'green')) 
+```
 ```{r make-standard}
 # Make forecast fit the EFI standards
 # Remember to change the model_id when you make changes to the model structure!
