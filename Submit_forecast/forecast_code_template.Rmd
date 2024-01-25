@@ -10,13 +10,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r load-packages, echo = F, warning=F, message=F}
-## install.packages('remotes')
-## install.packages('fpp3') # package for applying simple forecasting methods
-## install.packages('tsibble') # package for dealing with time series data sets and tsibble objects
-## install.packages('tidyverse') # collection of R packages for data manipulation, analysis, and visualisation
-## install.packages('lubridate') # working with dates and times
-## remotes::install_github('eco4cast/neon4cast') # package from NEON4cast challenge organisers to assist with forecast building and submission
-
+#install.packages('remotes')
+#install.packages('fpp3') # package for applying simple forecasting methods
+#install.packages('tsibble') # package for dealing with time series data sets and tsibble objects
+#nstall.packages('tidyverse') # collection of R packages for data manipulation, analysis, and visualisation
+#install.packages('lubridate') # working with dates and times
+#remotes::install_github('eco4cast/neon4cast') # package from NEON4cast challenge organisers to assist with forecast building and submission
+# update.packages(ask = FALSE)
 # Load packages
 library(tidyverse)
 library(lubridate)
@@ -45,7 +45,7 @@ targets <- targets %>%
 # Past stacked weather
 noaa_past_s3 <- neon4cast::noaa_stage3()
 
-variables <- c("air_temperature")
+variables <- c("air_temperature", "relative_humidity")
 #Other variable names can be found at https://projects.ecoforecast.org/neon4cast-docs/Shared-Forecast-Drivers.html#stage-3
 
 noaa_past <- noaa_past_s3  |> 
