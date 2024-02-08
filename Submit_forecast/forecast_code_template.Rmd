@@ -106,41 +106,13 @@ forecast_df <- NULL
 
 ```
 
-```{r forecast-loop}
-for(i in 1:length(lake_sites$field_site_id)) {  
-  
-  example_site <- lake_sites$field_site_id[i]
-  
-  site_target <- targets_lm |>
-    filter(site_id == example_site)
-
-  noaa_future_site <- noaa_future_daily |> 
-    filter(site_id == example_site)
-  
-  #Fit linear model based on past data: water temperature = m * air temperature + b
-  #fit <- lm(site_target$temperature ~ site_target$air_temperature)
-  fit <- lm(site_target$temperature ~ site_target$air_temperature + site_target$relative_humidity)
-    
-  # use linear regression to forecast water temperature for each ensemble member
-  forecasted_temperature <- fit$coefficients[1] + fit$coefficients[2] * noaa_future_site$air_temperature + fit$coefficients[3] * noaa_future_site$relative_humidity
-    
-  # put all the relavent information into a tibble that we can bind together
-  temperature <- tibble(datetime = noaa_future_site$datetime,
-                        site_id = example_site,
-                        parameter = noaa_future_site$parameter,
-                        prediction = forecasted_temperature,
-                        variable = "temperature")
-  
-  temp_lm_forecast_modified <- dplyr::bind_rows(temp_lm_forecast, temperature)
-  message(example_site, ' temperature forecast run')
-  
-}
-```
 
 ```{r forecast-loop with uncertainty}
+
 forecast_horizon <- 30
 forecast_dates <- seq(from = ymd(forecast_date), to = ymd(forecast_date) + forecast_horizon, by = "day")
 n_members <- 31
+
 
 for(i in 1:length(lake_sites$field_site_id)) {  
   
@@ -155,10 +127,9 @@ for(i in 1:length(lake_sites$field_site_id)) {
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
   #you will need to change the variable on the left side of the ~ if you are forecasting oxygen or chla
-  #fit <- lm(site_target$temperature ~ site_target$air_temperature)
   fit <- lm(site_target$temperature ~ site_target$air_temperature + site_target$relative_humidity)
-
-#parameter uncertainty  
+    
+  #parameter uncertainty  
   summary_fit<-summary(fit)
 coeffs <- round(summary_fit$coefficients, 3)
 
@@ -170,17 +141,11 @@ param_df <- data.frame(beta1 = rnorm(n_members, coeffs[1], params_se[1]),
 
 #process uncertainty
 mod <- predict(fit, site_target)
-
-r2 <- round(summary_fit$r.squared, 2) 
 residuals <- mod - site_target$temperature
-err <- mean(residuals, na.rm = TRUE) 
-rmse <- round(sqrt(mean((mod - site_target$temperature)^2, na.rm = TRUE)), 2) 
 
 sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this is your sigma
   
-
- # Loop through all forecast dates
-
+  # Loop through all forecast dates
   for (t in 1:length(forecast_dates)) {
   
   #pull driver ensemble for the relevant date; here we are using all 30 NOAA ensemble members
@@ -190,19 +155,16 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
   # use linear regression to forecast water temperature for each ensemble member
   # You will need to modify this line of code if you add additional weather variables or change the form of the model
   # The model here needs to match the model used in the lm function above (or what model you used in the fit)
-  #########forecasted_temperature <- fit$coefficients[1] + fit$coefficients[2] * site_drivers$air_temperature + fit$coefficients[3] * site_drivers$relative_humidity
-  #THE ABOVE MODEL ONLY HAS DRIVER UNCERTAINTY-- WE NEED TO ADD PROCESS UNCERTAINTY AND PARAMETER UNCERTAINTY
-  
-  forecasted_temp_withuncertainty <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + param_df$beta3 * site_drivers$relative_humidity + rnorm(n_members, mean = 0, sd = sigma)
+  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + site_drivers$relative_humidity * param_df$beta3 + rnorm(n_members, mean = 0, sd = sigma)
     
   # put all the relevant information into a tibble that we can bind together
-  curr_site_df_withuncertainty <- tibble(datetime = rep(forecast_dates[t], times = n_members),
-                        site_id = curr_site,
+  curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
+                         site_id = curr_site,
                          parameter = 1:n_members,
-                         prediction = forecasted_temp_withuncertainty,
+                         prediction = forecasted_temperature,
                          variable = "temperature") #Change this if you are forecasting a different variable
   
-  forecast_df_withuncertainty <- dplyr::bind_rows(forecast_df, curr_site_df_withuncertainty)
+  forecast_df <- dplyr::bind_rows(forecast_df, curr_site_df)
   
   }
   
@@ -211,91 +173,13 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
 
 ```
 
-```{r uncertainty prerequisits}
-n_members<-30
-
-#parameter uncertainty
-summary_fit<-summary(fit)
-coeffs <- round(summary_fit$coefficients, 3)
-coeffs
-
-params_se <- summary_fit$coefficients[,2]
-params_se
-
-param_df <- data.frame(beta1 = rnorm(30, coeffs[1], params_se[1]),
-                       beta2 = rnorm(30, coeffs[2], params_se[2]),
-                       beta3 = rnorm(30, coeffs[3], params_se[3]))
-
-#process uncertainty
-mod <- predict(fit, site_target)
-
-r2 <- round(summary_fit$r.squared, 2) 
-residuals <- mod - site_target$temperature
-err <- mean(residuals, na.rm = TRUE) 
-rmse <- round(sqrt(mean((mod - site_target$temperature)^2, na.rm = TRUE)), 2) 
-
-sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this is your sigma
-```
-
-```{r forecast-loop}
-
-forecast_total_unc <- tibble(forecast_date = rep(temp_lm_forecast$datetime, times = n_members),
-                             ensemble_member = rep(1:n_members, each = length(temp_lm_forecast$datetime)),
-                             forecast_variable = "water_temperature",
-                             value = as.double(NA),
-                             uc_type = "total") 
-
-####forecast trial and error
-
-###TWO
-for(i in 1:length(lake_sites$field_site_id)) {  
-  
-  example_site <- lake_sites$field_site_id[i]
-  
-  site_target <- targets_lm |>
-    filter(site_id == example_site)
-  
-  noaa_future_site <- noaa_future_daily |> 
-    filter(site_id == example_site)
-  
-  for(j in 1:length(temp_lm_forecast$datetime)) {
-     
-      noaa_past_mean |>
-    filter()
-    
-    fit <- lm(site_target$temperature ~ noaa_past_mean$air_temperature + noaa_past_mean$relative_humidity)
-  }
-
-}
-
-
-###ONE
-for(i in 2:length(temp_lm_forecast$datetime)) {
-  
-  #pull prediction dataframe for relevant date
-  temp_pred <- forecast_total_unc %>%
-    filter(forecast_date == temp_lm_forecast$datetime[i])
-  
-  #pull driver ensemble for the relevant date; here we are using all 30 NOAA ensemble members
-  temp_driv <- temp_lm_forecast %>%
-    filter(datetime == forecast_date[i])
-  
-  #run model using parameter distributions instead of fixed values, and adding process uncertainty
-  temp_pred$value <- param_df$beta1 + noaa_future_site$air_temperature * param_df$beta2 + noaa_future_site$relative_humidity * param_df$beta3 + rnorm(n = 30, mean = 0, sd = sigma) 
-  
-  #insert values back into the forecast dataframe
-  forecast_total_unc <- forecast_total_unc %>%
-    rows_update(temp_pred, by = c("forecast_date","ensemble_member","forecast_variable","uc_type"))
-}
-```
-
 ```{r make-standard}
 # Make forecast fit the EFI standards
 # Remember to change the model_id when you make changes to the model structure!
-my_model_id <- 'example_ID_VickeryFirstForecast'
+my_model_id <- 'example_ID_VickeryFirstForecast_wUC'
 
-temp_lm_forecast_EFI <- temp_lm_forecast_modified %>%
-  dplyr::filter(datetime > forecast_date) %>%
+forecast_df_EFI <- forecast_df %>%
+  filter(datetime > forecast_date) %>%
   mutate(model_id = my_model_id,
          reference_datetime = forecast_date,
          family = 'ensemble',
@@ -307,8 +191,8 @@ temp_lm_forecast_EFI <- temp_lm_forecast_modified %>%
 ```{r write-forecast}
 # Write the forecast to file
 theme <- 'aquatics'
-date <- temp_lm_forecast_EFI$reference_datetime[1]
-forecast_name_1 <- paste0(temp_lm_forecast_EFI$model_id[1], ".csv")
+date <- forecast_df_EFI$reference_datetime[1]
+forecast_name_1 <- paste0(forecast_df_EFI$model_id[1], ".csv")
 forecast_file_1 <- paste(theme, date, forecast_name_1, sep = '-')
 forecast_file_1
 
@@ -317,7 +201,7 @@ if (!dir.exists('Forecasts')) {
   dir.create('Forecasts')
 }
 
-write_csv(temp_lm_forecast_EFI, file.path('Forecasts',forecast_file_1))
+write_csv(forecast_df_EFI, file.path('Forecasts',forecast_file_1))
 
 neon4cast::forecast_output_validator(file.path('Forecasts',forecast_file_1))
 
@@ -335,9 +219,9 @@ neon4cast::forecast_output_validator(file.path('Forecasts',forecast_file_1))
 ```
 
 ```{r plot-forecast}
-temp_lm_forecast_EFI |> 
+forecast_df_EFI |> 
   ggplot(aes(x=datetime, y=prediction, group = parameter)) +
   geom_line() +
   facet_wrap(~site_id) +
-  labs(title = paste0('Forecast generated for ', temp_lm_forecast_EFI$variable[1], ' on ', temp_lm_forecast_EFI$reference_datetime[1]))
+  labs(title = paste0('Forecast generated for ', forecast_df_EFI$variable[1], ' on ', forecast_df_EFI$reference_datetime[1]))
 ```
