@@ -120,7 +120,8 @@ for(i in 1:length(lake_sites$field_site_id)) {
   
   # Get only the necessary data for the specific site
   site_target <- targets_lm |>
-    filter(site_id == curr_site)
+    filter(site_id == curr_site) |>
+    na.omit() #IN-CLASS EXPLANATION: add this line to omit NAs in the mod (line 144) below
 
   noaa_future_site <- noaa_future_daily |> 
     filter(site_id == curr_site)
@@ -131,10 +132,10 @@ for(i in 1:length(lake_sites$field_site_id)) {
     
   #parameter uncertainty  
   summary_fit<-summary(fit)
-coeffs <- round(summary_fit$coefficients, 3)
+coeffs <- round(fit$coefficients, 3)
 
 params_se <- summary_fit$coefficients[,2]
-
+#IN-CLASS EXPLANATION: we want these to be different for each site but the same throughout the forecast horizon. That is why these lines are within the first for loop but outside the second. 
 param_df <- data.frame(beta1 = rnorm(n_members, coeffs[1], params_se[1]),
                        beta2 = rnorm(n_members, coeffs[2], params_se[2]),
                        beta3 = rnorm(n_members, coeffs[3], params_se[3]))
@@ -156,7 +157,9 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
   # You will need to modify this line of code if you add additional weather variables or change the form of the model
   # The model here needs to match the model used in the lm function above (or what model you used in the fit)
   forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + site_drivers$relative_humidity * param_df$beta3 + rnorm(n_members, mean = 0, sd = sigma)
-    
+#IN-CLASS EXPLANATION: mean=0 because the noise should be evenly distributed above and below the estimation. 
+  #IN-CLASS EXPLANATION: make sure n=n_members consistently throughout the model
+  
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
                          site_id = curr_site,
@@ -224,4 +227,7 @@ forecast_df_EFI |>
   geom_line() +
   facet_wrap(~site_id) +
   labs(title = paste0('Forecast generated for ', forecast_df_EFI$variable[1], ' on ', forecast_df_EFI$reference_datetime[1]))
+
+#IN-CLASS EXPLANATION: Parameter uncertainty is constant, so that gives the graphs a generally standard spread. Initial condition uncertainty gives variability for the first day's estimates. Process uncertainty creates the zig zaggies. Driver uncertainty gives a funnel shape, so if there's no funnel shape, driver uncertainty is less important than the parameter and process uncertainties. 
+#How could we change that model structure to get a funnel shape? Add a time lag to reduce initial condition uncertainty. This presumes we have data for approximately now. 
 ```
