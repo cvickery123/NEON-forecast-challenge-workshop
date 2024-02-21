@@ -1,0 +1,69 @@
+---
+title: "forecast_Project1"
+author: "Caroline Vickery"
+date: "2024-02-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages, echo = F, warning=F, message=F}
+#install.packages('remotes')
+#install.packages('fpp3') # package for applying simple forecasting methods
+#install.packages('tsibble') # package for dealing with time series data sets and tsibble objects
+#nstall.packages('tidyverse') # collection of R packages for data manipulation, analysis, and visualisation
+#install.packages('lubridate') # working with dates and times
+#remotes::install_github('eco4cast/neon4cast') # package from NEON4cast challenge organisers to assist with forecast building and submission
+# update.packages(ask = FALSE)
+# Load packages
+library(tidyverse)
+library(lubridate)
+
+set.seed(101)
+```
+
+```{r get-targets, message=F}
+#read in the targets data
+targets <- read_csv('https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz')
+
+# read in the sites data
+aquatic_sites <- read_csv("https://raw.githubusercontent.com/eco4cast/neon4cast-targets/main/NEON_Field_Site_Metadata_20220412.csv") |>
+  dplyr::filter(aquatics == 1)
+
+lake_sites <- aquatic_sites %>%
+  filter(field_site_subtype == 'Lake')
+
+# Filter the targets
+targets <- targets %>%
+  filter(site_id %in% lake_sites$field_site_id,
+         variable == 'temperature')
+```
+
+I last left off below :) 
+
+```{r get-NOAA-past, message = F}
+
+# Past stacked weather
+noaa_past_s3 <- neon4cast::noaa_stage3()
+
+variables <- c("air_temperature", "relative_humidity")
+#Other variable names can be found at https://projects.ecoforecast.org/neon4cast-docs/Shared-Forecast-Drivers.html#stage-3
+
+noaa_past <- noaa_past_s3  |> 
+  dplyr::filter(site_id %in% lake_sites$field_site_id,
+                datetime >= ymd('2017-01-01'),
+                variable %in% variables) |> 
+  dplyr::collect()
+
+# aggregate the past to mean values
+noaa_past_mean <- noaa_past |> 
+  mutate(datetime = as_date(datetime)) |> 
+  group_by(datetime, site_id, variable) |> 
+  summarize(prediction = mean(prediction, na.rm = TRUE), .groups = "drop") |> 
+  pivot_wider(names_from = variable, values_from = prediction) |> 
+  # convert air temp to C
+  mutate(air_temperature = air_temperature - 273.15)
+
+```
