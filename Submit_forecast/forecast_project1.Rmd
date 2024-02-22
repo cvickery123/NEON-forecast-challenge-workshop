@@ -41,7 +41,6 @@ targets <- targets %>%
          variable == 'temperature')
 ```
 
-I last left off below :) am I connected to Git? 
 
 ```{r get-NOAA-past, message = F}
 
