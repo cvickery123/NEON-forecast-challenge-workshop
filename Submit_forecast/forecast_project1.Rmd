@@ -140,7 +140,7 @@ for(i in 1:length(lake_sites$field_site_id)) {
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
   #you will need to change the variable on the left side of the ~ if you are forecasting oxygen or chla
-  fit <- lm(site_target$temperature ~ site_target$air_temperature + site_target$relative_humidity * site_target$max_windspeed)
+  fit <- lm(site_target$temperature ~ site_target$air_temperature + site_target$relative_humidity + site_target$max_windspeed)
     
   #parameter uncertainty  
   summary_fit<-summary(fit)
@@ -169,7 +169,7 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
   # use linear regression to forecast water temperature for each ensemble member
   # You will need to modify this line of code if you add additional weather variables or change the form of the model
   # The model here needs to match the model used in the lm function above (or what model you used in the fit)
-  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + (site_drivers$relative_humidity * param_df$beta3) * (site_drivers$max_windspeed * param_df$beta4) + rnorm(n_members, mean = 0, sd = sigma)
+  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + site_drivers$relative_humidity * param_df$beta3 + site_drivers$max_windspeed * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
 #IN-CLASS EXPLANATION: mean=0 because the noise should be evenly distributed above and below the estimation. 
   #IN-CLASS EXPLANATION: make sure n=n_members consistently throughout the model
   
