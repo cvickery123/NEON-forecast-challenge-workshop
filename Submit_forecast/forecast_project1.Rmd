@@ -210,7 +210,4 @@ forecast_df_EFI |>
   geom_line() +
   facet_wrap(~site_id) +
   labs(title = paste0('Forecast generated for ', forecast_df_EFI$variable[1], ' on ', forecast_df_EFI$reference_datetime[1]))
-
-#IN-CLASS EXPLANATION: Parameter uncertainty is constant, so that gives the graphs a generally standard spread. Initial condition uncertainty gives variability for the first day's estimates. Process uncertainty creates the zig zaggies. Driver uncertainty gives a funnel shape, so if there's no funnel shape, driver uncertainty is less important than the parameter and process uncertainties. 
-#How could we change that model structure to get a funnel shape? Add a time lag to reduce initial condition uncertainty. This presumes we have data for approximately now. 
 ```
