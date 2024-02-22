@@ -145,6 +145,25 @@ for(j in listofsites){
   
 }
 
+lagdf<-NULL
+
+for(i in 1:length(combined_met_df$site_id)) {  
+  
+  curr_site <- combined_met_df$site_id[i]
+  
+  for(j in 1:length(combined_met_df$parameter)){
+    curr_param <- combined_met_df$parameter[j]
+    
+    jason<-combined_met_df %>% filter(site_id==curr_site) %>% 
+      filter(parameter==curr_param) 
+    
+    jason$datetimeplus1<-jason$datetime + days(1)
+    
+    lagdf <- dplyr::bind_rows(lagdf, jason) 
+  }
+    message(curr_site, 'forecast run')
+}
+
 ```
 
 ```{r get-NOAA-future, message = F}
