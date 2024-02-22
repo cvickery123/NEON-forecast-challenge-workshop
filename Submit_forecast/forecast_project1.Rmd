@@ -73,6 +73,80 @@ noaa_past_mean$max_windspeed<-ifelse(noaa_past_mean$northward_wind > noaa_past_m
 noaa_past_mean$max_windspeed<-as.numeric(noaa_past_mean$max_windspeed)
 ```
 
+```{r timelag}
+noaa_forecast_start <- Sys.Date() - days(1)
+min_historical_day <- Sys.Date() - days(60)
+variables <- "air_temperature"
+
+noaa_past_mean <-  neon4cast::noaa_stage3() |> 
+  filter(variable %in% variables,
+                datetime > min_historical_day,
+                datetime < noaa_forecast_start) |> 
+  collect() |> 
+  mutate(datetime = as_date(datetime)) |> 
+  summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |> 
+  pivot_wider(names_from = variable, values_from = prediction) |> 
+  mutate(air_temperature = air_temperature - 273.15)
+
+noaa_future_mean <- neon4cast::noaa_stage2(start_date = noaa_forecast_start) |> 
+  filter(datetime >= noaa_forecast_start,
+                variable %in% variables) |> 
+  collect() |> 
+  mutate(datetime = as_date(datetime)) |> 
+  summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |>
+  pivot_wider(names_from = variable, values_from = prediction) |>
+  mutate(air_temperature = air_temperature - 273.15) |> 
+  select(datetime, site_id, air_temperature, parameter)
+
+combined_met_df <- bind_rows(noaa_past_mean, noaa_future_mean)
+
+#ggplot(combined_met_df, aes(x = datetime, y = air_temperature, group = parameter)) +
+ # geom_line() + 
+ # geom_vline(aes(xintercept = Sys.Date()), color = "blue")
+
+Abbytest<-combined_met_df %>% filter(parameter==1) %>% filter(site_id=="ABBY")
+
+#for each row, I want to average the temperature over the last two days, and use that air temperature
+
+Abbytest$datetimeplus1<-Abbytest$datetime + days(1)
+nsites<-combined_met_df %>% dplyr::count(site_id)
+
+listofsites<-as.vector(nsites$site_id)
+
+blankdf<-tibble(datetime=NA,
+                site_id=NA,
+                parameter=NA,
+                air_temperature=NA,
+                datetimelag=NA)
+blankdf2<-tibble(datetime=NA,
+                site_id=NA,
+                parameter=NA,
+                air_temperature=NA,
+                datetimelag=NA)
+allparameterswithlag<-tibble(datetime=NA,
+                site_id=NA,
+                parameter=NA,
+                air_temperature=NA,
+                datetimelag=NA)
+parameter<-30
+for(j in listofsites){
+  airtempbysite<-combined_met_df %>% filter(site_id==j)
+  airtempbysite$datetimelag<-NA
+  
+  for(i in parameter){
+  airtempbysiteandparameter<-airtempbysite %>% filter(parameter==i)
+  airtempbysiteandparameter$datetimelag<-airtempbysiteandparameter$datetime + days(1)
+
+  allparameterswithlag<-rbind(blankdf, airtempbysiteandparameter)
+  
+  }
+  
+  laggeddata<-rbind(blankdf2, allparameterswithlag)
+  
+}
+
+```
+
 ```{r get-NOAA-future, message = F}
 # Future weather
 # New forecast only available at 5am UTC the next day
