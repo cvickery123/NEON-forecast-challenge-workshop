@@ -65,104 +65,108 @@ noaa_past_mean <- noaa_past |>
   # convert air temp to C
   mutate(air_temperature = air_temperature - 273.15)
 
-noaa_past_mean$eastward_wind<-abs(noaa_past_mean$eastward_wind)
-noaa_past_mean$northward_wind<-abs(noaa_past_mean$northward_wind)
+noaa_past_mean$windspeed<-sqrt(noaa_past_mean$eastward_wind^2 + noaa_past_mean$northward_wind^2)
 
-noaa_past_mean$max_windspeed<-ifelse(noaa_past_mean$northward_wind > noaa_past_mean$eastward_wind, paste(noaa_past_mean$northward_wind), paste(noaa_past_mean$eastward_wind))
-
-noaa_past_mean$max_windspeed<-as.numeric(noaa_past_mean$max_windspeed)
+# noaa_past_mean$eastward_wind<-abs(noaa_past_mean$eastward_wind)
+# noaa_past_mean$northward_wind<-abs(noaa_past_mean$northward_wind)
+# 
+# noaa_past_mean$max_windspeed<-ifelse(noaa_past_mean$northward_wind > noaa_past_mean$eastward_wind, paste(noaa_past_mean$northward_wind), paste(noaa_past_mean$eastward_wind))
+# 
+# noaa_past_mean$max_windspeed<-as.numeric(noaa_past_mean$max_windspeed)
 ```
 
 ```{r timelag}
-noaa_forecast_start <- Sys.Date() - days(1)
-min_historical_day <- Sys.Date() - days(60)
-variables <- "air_temperature"
-
-noaa_past_mean <-  neon4cast::noaa_stage3() |> 
-  filter(variable %in% variables,
-                datetime > min_historical_day,
-                datetime < noaa_forecast_start) |> 
-  collect() |> 
-  mutate(datetime = as_date(datetime)) |> 
-  summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |> 
-  pivot_wider(names_from = variable, values_from = prediction) |> 
-  mutate(air_temperature = air_temperature - 273.15)
-
-noaa_future_mean <- neon4cast::noaa_stage2(start_date = noaa_forecast_start) |> 
-  filter(datetime >= noaa_forecast_start,
-                variable %in% variables) |> 
-  collect() |> 
-  mutate(datetime = as_date(datetime)) |> 
-  summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |>
-  pivot_wider(names_from = variable, values_from = prediction) |>
-  mutate(air_temperature = air_temperature - 273.15) |> 
-  select(datetime, site_id, air_temperature, parameter)
-
-combined_met_df <- bind_rows(noaa_past_mean, noaa_future_mean)
-
-#ggplot(combined_met_df, aes(x = datetime, y = air_temperature, group = parameter)) +
- # geom_line() + 
- # geom_vline(aes(xintercept = Sys.Date()), color = "blue")
-
-Abbytest<-combined_met_df %>% filter(parameter==1) %>% filter(site_id=="ABBY")
-
-#for each row, I want to average the temperature over the last two days, and use that air temperature
-
-Abbytest$datetimeplus1<-Abbytest$datetime + days(1)
-nsites<-combined_met_df %>% dplyr::count(site_id)
-
-listofsites<-as.vector(nsites$site_id)
-
-blankdf<-tibble(datetime=NA,
-                site_id=NA,
-                parameter=NA,
-                air_temperature=NA,
-                datetimelag=NA)
-blankdf2<-tibble(datetime=NA,
-                site_id=NA,
-                parameter=NA,
-                air_temperature=NA,
-                datetimelag=NA)
-allparameterswithlag<-tibble(datetime=NA,
-                site_id=NA,
-                parameter=NA,
-                air_temperature=NA,
-                datetimelag=NA)
-parameter<-30
-for(j in listofsites){
-  airtempbysite<-combined_met_df %>% filter(site_id==j)
-  airtempbysite$datetimelag<-NA
-  
-  for(i in parameter){
-  airtempbysiteandparameter<-airtempbysite %>% filter(parameter==i)
-  airtempbysiteandparameter$datetimelag<-airtempbysiteandparameter$datetime + days(1)
-
-  allparameterswithlag<-rbind(blankdf, airtempbysiteandparameter)
-  
-  }
-  
-  laggeddata<-rbind(blankdf2, allparameterswithlag)
-  
-}
-
-lagdf<-NULL
-
-for(i in 1:length(combined_met_df$site_id)) {  
-  
-  curr_site <- combined_met_df$site_id[i]
-  
-  for(j in 1:length(combined_met_df$parameter)){
-    curr_param <- combined_met_df$parameter[j]
-    
-    jason<-combined_met_df %>% filter(site_id==curr_site) %>% 
-      filter(parameter==curr_param) 
-    
-    jason$datetimeplus1<-jason$datetime + days(1)
-    
-    lagdf <- dplyr::bind_rows(lagdf, jason) 
-  }
-    message(curr_site, 'forecast run')
-}
+# noaa_forecast_start <- Sys.Date() - days(1)
+# min_historical_day <- Sys.Date() - days(60)
+# variables <- "air_temperature"
+# 
+# noaa_past_mean2 <-  neon4cast::noaa_stage3() |> 
+#   filter(variable %in% variables,
+#                 datetime > min_historical_day,
+#                 datetime < noaa_forecast_start) |> 
+#   collect() |> 
+#   mutate(datetime = as_date(datetime)) |> 
+#   summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |> 
+#   pivot_wider(names_from = variable, values_from = prediction) |> 
+#   mutate(air_temperature = air_temperature - 273.15)
+# 
+# noaa_future_mean2 <- neon4cast::noaa_stage2(start_date = noaa_forecast_start) |> 
+#   filter(datetime >= noaa_forecast_start,
+#                 variable %in% variables) |> 
+#   collect() |> 
+#   mutate(datetime = as_date(datetime)) |> 
+#   summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |>
+#   pivot_wider(names_from = variable, values_from = prediction) |>
+#   mutate(air_temperature = air_temperature - 273.15) |> 
+#   select(datetime, site_id, air_temperature, parameter)
+# 
+# combined_met_df <- bind_rows(noaa_past_mean2, noaa_future_mean2)
+# 
+# #ggplot(combined_met_df, aes(x = datetime, y = air_temperature, group = parameter)) +
+#  # geom_line() + 
+#  # geom_vline(aes(xintercept = Sys.Date()), color = "blue")
+# 
+# # Abbytest<-combined_met_df %>% filter(parameter==1) %>% filter(site_id=="ABBY")
+# 
+# #for each row, I want to average the temperature over the last two days, and use that air temperature
+# 
+# #Abbytest$datetimeplus1<-Abbytest$datetime + days(1)
+# #nsites<-combined_met_df %>% dplyr::count(site_id)
+# 
+# # listofsites<-as.vector(nsites$site_id)
+# 
+# #blankdf<-tibble(datetime=NA,
+#             #    site_id=NA,
+#              #   parameter=NA,
+#               #  air_temperature=NA,
+#                # datetimelag=NA)
+# #blankdf2<-tibble(datetime=NA,
+#            #     site_id=NA,
+#             #    parameter=NA,
+#              #   air_temperature=NA,
+#               #  datetimelag=NA)
+# #allparameterswithlag<-tibble(datetime=NA,
+# #                 site_id=NA,
+# #                 parameter=NA,
+# #                 air_temperature=NA,
+# #                 datetimelag=NA)
+# # parameter<-30
+# #for(j in listofsites){
+#   # airtempbysite<-combined_met_df %>% filter(site_id==j)
+#   # airtempbysite$datetimelag<-NA
+#   # 
+#   # for(i in parameter){
+#   # airtempbysiteandparameter<-airtempbysite %>% filter(parameter==i)
+#   # airtempbysiteandparameter$datetimelag<-airtempbysiteandparameter$datetime + days(1)
+#   # 
+#   # allparameterswithlag<-rbind(blankdf, airtempbysiteandparameter)
+#   # 
+#   # }
+# #   
+# #   laggeddata<-rbind(blankdf2, allparameterswithlag)
+# #   
+# # }
+# 
+# lagdf<-NULL
+# 
+# for(i in 1:length(combined_met_df$site_id)) {  
+#   
+#   curr_site <- combined_met_df$site_id[i]
+#   
+#   for(j in 1:length(combined_met_df$parameter)){
+#     curr_param <- combined_met_df$parameter[j]
+#     
+#     jason<-combined_met_df %>% filter(site_id==curr_site) %>% 
+#       filter(parameter==curr_param) 
+#     
+#     jason$datetimeplus1<-jason$datetime + days(1)
+#     
+#     lagdf <- dplyr::bind_rows(lagdf, jason) 
+#   }
+#     message(curr_site, 'forecast run')
+# }
+# 
+# lagdf<-lagdf %>% select(c(air_temperature,datetimeplus1))
 
 ```
 
@@ -190,12 +194,22 @@ noaa_future_daily <- noaa_future |>
   # convert to Celsius
   mutate(air_temperature = air_temperature - 273.15) 
 
-noaa_future_daily$eastward_wind<-abs(noaa_future_daily$eastward_wind)
-noaa_future_daily$northward_wind<-abs(noaa_future_daily$northward_wind)
+noaa_future_daily$windspeed<-sqrt(noaa_future_daily$eastward_wind^2 + noaa_future_daily$northward_wind^2)
 
-noaa_future_daily$max_windspeed<-ifelse(noaa_future_daily$northward_wind > noaa_future_daily$eastward_wind, paste(noaa_future_daily$northward_wind), paste(noaa_future_daily$eastward_wind))
+# noaa_future_daily$eastward_wind<-abs(noaa_future_daily$eastward_wind)
+# noaa_future_daily$northward_wind<-abs(noaa_future_daily$northward_wind)
+# 
+# noaa_future_daily$max_windspeed<-ifelse(noaa_future_daily$northward_wind > noaa_future_daily$eastward_wind, paste(noaa_future_daily$northward_wind), paste(noaa_future_daily$eastward_wind))
+# 
+# noaa_future_daily$max_windspeed<-as.numeric(noaa_future_daily$max_windspeed)
 
-noaa_future_daily$max_windspeed<-as.numeric(noaa_future_daily$max_windspeed)
+combined_met_df1 <- bind_rows(noaa_past_mean, noaa_future_mean)
+
+jasontest<-combined_met_df1 %>% select(c(air_temperature, datetime))
+jasontest$datetimeplus1<-jasontest$datetime + days(1)
+colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "datetime")
+
+derulotest<-left_join(combined_met_df1, jasontest, by="datetime")
 ```
 
 ```{r model-setup}
@@ -203,7 +217,7 @@ noaa_future_daily$max_windspeed<-as.numeric(noaa_future_daily$max_windspeed)
 targets_lm <- targets |> 
   filter(variable == 'temperature') |>
   pivot_wider(names_from = 'variable', values_from = 'observation') |> 
-  left_join(noaa_past_mean, 
+  left_join(derulotest, 
             by = c("datetime","site_id"))
 
 # Loop through each site to fit the model
@@ -233,7 +247,7 @@ for(i in 1:length(lake_sites$field_site_id)) {
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
   #you will need to change the variable on the left side of the ~ if you are forecasting oxygen or chla
-  fit <- lm(site_target$temperature ~ site_target$air_temperature + site_target$relative_humidity + site_target$max_windspeed)
+  fit <- lm(site_target$temperature ~ site_target$airtemp_1daylag + site_target$relative_humidity + site_target$windspeed)
     
   #parameter uncertainty  
   summary_fit<-summary(fit)
@@ -262,7 +276,7 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
   # use linear regression to forecast water temperature for each ensemble member
   # You will need to modify this line of code if you add additional weather variables or change the form of the model
   # The model here needs to match the model used in the lm function above (or what model you used in the fit)
-  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + site_drivers$relative_humidity * param_df$beta3 + site_drivers$max_windspeed * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
+  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + site_drivers$windspeed * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
 #IN-CLASS EXPLANATION: mean=0 because the noise should be evenly distributed above and below the estimation. 
   #IN-CLASS EXPLANATION: make sure n=n_members consistently throughout the model
   
