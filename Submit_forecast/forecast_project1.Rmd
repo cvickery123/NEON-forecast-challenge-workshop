@@ -203,7 +203,7 @@ noaa_future_daily$windspeed<-sqrt(noaa_future_daily$eastward_wind^2 + noaa_futur
 # 
 # noaa_future_daily$max_windspeed<-as.numeric(noaa_future_daily$max_windspeed)
 
-combined_met_df1 <- bind_rows(noaa_past_mean, noaa_future_mean)
+combined_met_df1 <- bind_rows(noaa_past_mean, noaa_future_daily)
 
 jasontest<-combined_met_df1 %>% select(c(air_temperature, datetime))
 jasontest$datetimeplus1<-jasontest$datetime + days(1)
