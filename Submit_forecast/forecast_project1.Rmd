@@ -174,8 +174,8 @@ noaa_past_mean$windspeed<-sqrt(noaa_past_mean$eastward_wind^2 + noaa_past_mean$n
 # Future weather
 # New forecast only available at 5am UTC the next day
 forecast_date <- Sys.Date() 
-noaa_date <- forecast_date - days(2)
-#helP?
+noaa_date <- forecast_date - days(1)
+
 noaa_future_s3 <- neon4cast::noaa_stage2(start_date = as.character(noaa_date))
 variables <- c("air_temperature", "relative_humidity", "eastward_wind", "northward_wind")
 
@@ -202,14 +202,28 @@ noaa_future_daily$windspeed<-sqrt(noaa_future_daily$eastward_wind^2 + noaa_futur
 # noaa_future_daily$max_windspeed<-ifelse(noaa_future_daily$northward_wind > noaa_future_daily$eastward_wind, paste(noaa_future_daily$northward_wind), paste(noaa_future_daily$eastward_wind))
 # 
 # noaa_future_daily$max_windspeed<-as.numeric(noaa_future_daily$max_windspeed)
+noaa_future_daily_mean<-noaa_future_daily
+
+for(i in 1:length(lake_sites$field_site_id)){
+  curr_site <- lake_sites$field_site_id[i]
+  
+  usher<-noaa_future_daily %>% filter(site_id==curr_site)
+  
+  for(p in 1:30){
+    currentparameter<-usher %>% filter(parameter==p)
+    currentparameter %>% summarize(airtempmean_byparameter = mean(air_temperature))
+    
+  }
+}
 
 combined_met_df1 <- bind_rows(noaa_past_mean, noaa_future_daily)
 
-jasontest<-combined_met_df1 %>% select(c(air_temperature, datetime))
+jasontest<-combined_met_df1 %>% select(c(air_temperature, datetime, site_id, parameter))
 jasontest$datetimeplus1<-jasontest$datetime + days(1)
-colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "datetime")
+colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "site_id", "parameter",  "datetime")
 
-derulotest<-left_join(combined_met_df1, jasontest, by="datetime")
+derulotest<-left_join(combined_met_df1, jasontest, by=c("datetime", "site_id", "parameter"))
+# derulotest %>% filter(site_id=="TOOK") %>% select(datetime, site_id, air_temperature, airtemp_1daylag, realdatetime, parameter) %>% view()
 ```
 
 ```{r model-setup}
@@ -219,9 +233,6 @@ targets_lm <- targets |>
   pivot_wider(names_from = 'variable', values_from = 'observation') |> 
   left_join(derulotest, 
             by = c("datetime","site_id"))
-
-# Loop through each site to fit the model
-forecast_df <- NULL
 
 ```
 
@@ -239,11 +250,12 @@ for(i in 1:length(lake_sites$field_site_id)) {
   
   # Get only the necessary data for the specific site
   site_target <- targets_lm |>
-    filter(site_id == curr_site) |>
-    na.omit() #IN-CLASS EXPLANATION: add this line to omit NAs in the mod (line 144) below
+    filter(site_id == curr_site,
+           datetime < ymd(forecast_date)) 
 
-  noaa_future_site <- noaa_future_daily |> 
-    filter(site_id == curr_site)
+  noaa_future_site <- derulotest |> 
+    filter(site_id == curr_site,
+           datetime >= ymd(forecast_date)) 
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
   #you will need to change the variable on the left side of the ~ if you are forecasting oxygen or chla
