@@ -67,12 +67,6 @@ noaa_past_mean <- noaa_past |>
 
 noaa_past_mean$windspeed<-sqrt(noaa_past_mean$eastward_wind^2 + noaa_past_mean$northward_wind^2)
 
-# noaa_past_mean$eastward_wind<-abs(noaa_past_mean$eastward_wind)
-# noaa_past_mean$northward_wind<-abs(noaa_past_mean$northward_wind)
-# 
-# noaa_past_mean$max_windspeed<-ifelse(noaa_past_mean$northward_wind > noaa_past_mean$eastward_wind, paste(noaa_past_mean$northward_wind), paste(noaa_past_mean$eastward_wind))
-# 
-# noaa_past_mean$max_windspeed<-as.numeric(noaa_past_mean$max_windspeed)
 ```
 
 ```{r timelag}
@@ -196,34 +190,16 @@ noaa_future_daily <- noaa_future |>
 
 noaa_future_daily$windspeed<-sqrt(noaa_future_daily$eastward_wind^2 + noaa_future_daily$northward_wind^2)
 
-# noaa_future_daily$eastward_wind<-abs(noaa_future_daily$eastward_wind)
-# noaa_future_daily$northward_wind<-abs(noaa_future_daily$northward_wind)
-# 
-# noaa_future_daily$max_windspeed<-ifelse(noaa_future_daily$northward_wind > noaa_future_daily$eastward_wind, paste(noaa_future_daily$northward_wind), paste(noaa_future_daily$eastward_wind))
-# 
-# noaa_future_daily$max_windspeed<-as.numeric(noaa_future_daily$max_windspeed)
-noaa_future_daily_mean<-noaa_future_daily
-
-for(i in 1:length(lake_sites$field_site_id)){
-  curr_site <- lake_sites$field_site_id[i]
-  
-  usher<-noaa_future_daily %>% filter(site_id==curr_site)
-  
-  for(p in 1:30){
-    currentparameter<-usher %>% filter(parameter==p)
-    currentparameter %>% summarize(airtempmean_byparameter = mean(air_temperature))
-    
-  }
-}
-
 combined_met_df1 <- bind_rows(noaa_past_mean, noaa_future_daily)
 
 jasontest<-combined_met_df1 %>% select(c(air_temperature, datetime, site_id, parameter))
 jasontest$datetimeplus1<-jasontest$datetime + days(1)
 colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "site_id", "parameter",  "datetime")
 
-derulotest<-left_join(combined_met_df1, jasontest, by=c("datetime", "site_id", "parameter"))
-# derulotest %>% filter(site_id=="TOOK") %>% select(datetime, site_id, air_temperature, airtemp_1daylag, realdatetime, parameter) %>% view()
+derulotest<-left_join(combined_met_df1, jasontest, by=c("datetime", "site_id", "parameter")) 
+ # derulotest %>% filter(site_id=="BARC") %>% select(datetime, site_id, air_temperature, airtemp_1daylag, realdatetime, parameter) %>% view()
+
+#NEXT STEP::::: need to write code to paste sys.date air temperature into all the airtemp_1daylag parameters for sys.date as well 
 ```
 
 ```{r model-setup}
@@ -252,13 +228,12 @@ for(i in 1:length(lake_sites$field_site_id)) {
   site_target <- targets_lm |>
     filter(site_id == curr_site,
            datetime < ymd(forecast_date)) 
-
+###QUESTION: NA.OMIT() HERE GIVES ME ZEROS FOR ALL OF MY SITE TARGETS, STOPPING THE MODEL. 
   noaa_future_site <- derulotest |> 
     filter(site_id == curr_site,
            datetime >= ymd(forecast_date)) 
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
-  #you will need to change the variable on the left side of the ~ if you are forecasting oxygen or chla
   fit <- lm(site_target$temperature ~ site_target$airtemp_1daylag + site_target$relative_humidity)
     
   #parameter uncertainty  
@@ -272,7 +247,7 @@ param_df <- data.frame(beta1 = rnorm(n_members, coeffs[1], params_se[1]),
                        beta3 = rnorm(n_members, coeffs[3], params_se[3]))
 
 #process uncertainty
-mod <- predict(fit, site_target)
+mod <- predict(fit, site_target) |> na.omit()
 residuals <- mod - site_target$temperature
 
 sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this is your sigma
@@ -285,7 +260,6 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
     filter(datetime == forecast_dates[t])
   
   # use linear regression to forecast water temperature for each ensemble member
-  # You will need to modify this line of code if you add additional weather variables or change the form of the model
   # The model here needs to match the model used in the lm function above (or what model you used in the fit)
   forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + rnorm(n_members, mean = 0, sd = sigma)
 #IN-CLASS EXPLANATION: mean=0 because the noise should be evenly distributed above and below the estimation. 
@@ -296,7 +270,7 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
                          site_id = curr_site,
                          parameter = 1:n_members,
                          prediction = forecasted_temperature,
-                         variable = "temperature") #Change this if you are forecasting a different variable
+                         variable = "temperature") 
   
   forecast_df <- dplyr::bind_rows(forecast_df, curr_site_df)
   
