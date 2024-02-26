@@ -69,101 +69,6 @@ noaa_past_mean$windspeed<-sqrt(noaa_past_mean$eastward_wind^2 + noaa_past_mean$n
 
 ```
 
-```{r timelag}
-# noaa_forecast_start <- Sys.Date() - days(1)
-# min_historical_day <- Sys.Date() - days(60)
-# variables <- "air_temperature"
-# 
-# noaa_past_mean2 <-  neon4cast::noaa_stage3() |> 
-#   filter(variable %in% variables,
-#                 datetime > min_historical_day,
-#                 datetime < noaa_forecast_start) |> 
-#   collect() |> 
-#   mutate(datetime = as_date(datetime)) |> 
-#   summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |> 
-#   pivot_wider(names_from = variable, values_from = prediction) |> 
-#   mutate(air_temperature = air_temperature - 273.15)
-# 
-# noaa_future_mean2 <- neon4cast::noaa_stage2(start_date = noaa_forecast_start) |> 
-#   filter(datetime >= noaa_forecast_start,
-#                 variable %in% variables) |> 
-#   collect() |> 
-#   mutate(datetime = as_date(datetime)) |> 
-#   summarize(prediction = mean(prediction), .by = c("datetime", "site_id", "parameter", "variable")) |>
-#   pivot_wider(names_from = variable, values_from = prediction) |>
-#   mutate(air_temperature = air_temperature - 273.15) |> 
-#   select(datetime, site_id, air_temperature, parameter)
-# 
-# combined_met_df <- bind_rows(noaa_past_mean2, noaa_future_mean2)
-# 
-# #ggplot(combined_met_df, aes(x = datetime, y = air_temperature, group = parameter)) +
-#  # geom_line() + 
-#  # geom_vline(aes(xintercept = Sys.Date()), color = "blue")
-# 
-# # Abbytest<-combined_met_df %>% filter(parameter==1) %>% filter(site_id=="ABBY")
-# 
-# #for each row, I want to average the temperature over the last two days, and use that air temperature
-# 
-# #Abbytest$datetimeplus1<-Abbytest$datetime + days(1)
-# #nsites<-combined_met_df %>% dplyr::count(site_id)
-# 
-# # listofsites<-as.vector(nsites$site_id)
-# 
-# #blankdf<-tibble(datetime=NA,
-#             #    site_id=NA,
-#              #   parameter=NA,
-#               #  air_temperature=NA,
-#                # datetimelag=NA)
-# #blankdf2<-tibble(datetime=NA,
-#            #     site_id=NA,
-#             #    parameter=NA,
-#              #   air_temperature=NA,
-#               #  datetimelag=NA)
-# #allparameterswithlag<-tibble(datetime=NA,
-# #                 site_id=NA,
-# #                 parameter=NA,
-# #                 air_temperature=NA,
-# #                 datetimelag=NA)
-# # parameter<-30
-# #for(j in listofsites){
-#   # airtempbysite<-combined_met_df %>% filter(site_id==j)
-#   # airtempbysite$datetimelag<-NA
-#   # 
-#   # for(i in parameter){
-#   # airtempbysiteandparameter<-airtempbysite %>% filter(parameter==i)
-#   # airtempbysiteandparameter$datetimelag<-airtempbysiteandparameter$datetime + days(1)
-#   # 
-#   # allparameterswithlag<-rbind(blankdf, airtempbysiteandparameter)
-#   # 
-#   # }
-# #   
-# #   laggeddata<-rbind(blankdf2, allparameterswithlag)
-# #   
-# # }
-# 
-# lagdf<-NULL
-# 
-# for(i in 1:length(combined_met_df$site_id)) {  
-#   
-#   curr_site <- combined_met_df$site_id[i]
-#   
-#   for(j in 1:length(combined_met_df$parameter)){
-#     curr_param <- combined_met_df$parameter[j]
-#     
-#     jason<-combined_met_df %>% filter(site_id==curr_site) %>% 
-#       filter(parameter==curr_param) 
-#     
-#     jason$datetimeplus1<-jason$datetime + days(1)
-#     
-#     lagdf <- dplyr::bind_rows(lagdf, jason) 
-#   }
-#     message(curr_site, 'forecast run')
-# }
-# 
-# lagdf<-lagdf %>% select(c(air_temperature,datetimeplus1))
-
-```
-
 ```{r get-NOAA-future, message = F}
 # Future weather
 # New forecast only available at 5am UTC the next day
@@ -197,9 +102,37 @@ jasontest$datetimeplus1<-jasontest$datetime + days(1)
 colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "site_id", "parameter",  "datetime")
 
 derulotest<-left_join(combined_met_df1, jasontest, by=c("datetime", "site_id", "parameter")) 
- # derulotest %>% filter(site_id=="BARC") %>% select(datetime, site_id, air_temperature, airtemp_1daylag, realdatetime, parameter) %>% view()
+# derulotest %>% filter(site_id=="BARC") %>% select(datetime, site_id, air_temperature, airtemp_1daylag, realdatetime, parameter) %>% view()
 
 #NEXT STEP::::: need to write code to paste sys.date air temperature into all the airtemp_1daylag parameters for sys.date as well 
+
+cyrus_df<-NULL
+
+
+for(i in 1:length(lake_sites$field_site_id)){
+  curr_site <- lake_sites$field_site_id[i]
+  
+  currentrow<-derulotest %>% filter(datetime==Sys.Date(), site_id==curr_site,
+                                    airtemp_1daylag!=is.na(airtemp_1daylag))
+  
+  airtemptopaste<-currentrow$airtemp_1daylag
+  realdatetopaste<-currentrow$realdatetime
+
+  mileytest<-derulotest %>% filter(datetime==Sys.Date(),
+                                 site_id==curr_site) %>% 
+    select(datetime, site_id, parameter, airtemp_1daylag, realdatetime)
+
+  party<-mileytest %>% filter(parameter!=is.na(parameter))
+  
+  party$airtemp_1daylag<-airtemptopaste
+  party$realdatetime<-realdatetopaste
+  
+  cyrus_df<-dplyr::bind_rows(party, cyrus_df)
+}
+
+
+derulotest2<-merge(derulotest, cyrus_df, by=c("datetime", "site_id", "parameter")) 
+
 ```
 
 ```{r model-setup}
