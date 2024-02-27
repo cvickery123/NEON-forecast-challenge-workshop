@@ -97,10 +97,13 @@ noaa_future_daily$windspeed<-sqrt(noaa_future_daily$eastward_wind^2 + noaa_futur
 
 combined_met_df1 <- bind_rows(noaa_past_mean, noaa_future_daily)
 
-jasontest<-combined_met_df1 %>% select(c(air_temperature, datetime, site_id, parameter))
+jasontest<-combined_met_df1 %>% 
+  arrange(site_id, parameter, datetime) %>% 
+  group_by(site_id, parameter) %>%
+  mutate(airtemp_1daylag = lag(air_temperature)) #correct way to lag 
 jasontest$datetimeplus1<-jasontest$datetime + days(1)
 colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "site_id", "parameter",  "datetime")
-
+view(jasontest)
 derulotest<-left_join(combined_met_df1, jasontest, by=c("datetime", "site_id", "parameter")) 
 
 #filling in the gaps - Sys.Date data is missing airtemp_1daylag
@@ -134,11 +137,11 @@ derulotest2<-left_join(derulotest, cyrus_df, by=c("datetime", "site_id", "parame
 derulotest2<-derulotest2 %>% select(order(colnames(.))) %>% unite("airtemp_1daylag", airtemp_1daylag.x:airtemp_1daylag.y, na.rm = TRUE, remove = FALSE)
 derulotest2<-derulotest2 %>% unite("realdatetime", realdatetime.x:realdatetime.y, na.rm = TRUE, remove = FALSE)
 
-derulotest2 %>% filter(datetime==Sys.Date()) %>% view()
+#derulotest2 %>% filter(datetime==Sys.Date()) %>% view()
 
 derulotest2<-derulotest2 %>% select(-c(airtemp_1daylag.x, airtemp_1daylag.y, realdatetime.x, realdatetime.y))
 
-
+derulotest2$airtemp_1daylag<-as.numeric(derulotest2$airtemp_1daylag)
 ```
 
 ```{r model-setup}
@@ -158,7 +161,7 @@ forecast_dates <- seq(from = ymd(forecast_date), to = ymd(forecast_date) + forec
 n_members <- 31
 
 forecast_df <- NULL
-
+###NEXT STEP: REMOVE NAs FROM MOD WITHOUT CREATING ALL NAs
 for(i in 1:length(lake_sites$field_site_id)) {  
   
   curr_site <- lake_sites$field_site_id[i]
@@ -166,11 +169,12 @@ for(i in 1:length(lake_sites$field_site_id)) {
   # Get only the necessary data for the specific site
   site_target <- targets_lm |>
     filter(site_id == curr_site,
-           datetime < ymd(forecast_date))
-###QUESTION: NA.OMIT() HERE GIVES ME ZEROS FOR ALL OF MY SITE TARGETS, STOPPING THE MODEL. 
+           datetime <= ymd(forecast_date))
+
   noaa_future_site <- derulotest2 |> 
     filter(site_id == curr_site,
-           datetime >= ymd(forecast_date)) 
+           datetime >= ymd(forecast_date), 
+           parameter != is.na(parameter)) 
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
   fit <- lm(site_target$temperature ~ site_target$airtemp_1daylag + site_target$relative_humidity)
@@ -199,10 +203,8 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
     filter(datetime == forecast_dates[t])
   
   # use linear regression to forecast water temperature for each ensemble member
-  # The model here needs to match the model used in the lm function above (or what model you used in the fit)
   forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + rnorm(n_members, mean = 0, sd = sigma)
-#IN-CLASS EXPLANATION: mean=0 because the noise should be evenly distributed above and below the estimation. 
-  #IN-CLASS EXPLANATION: make sure n=n_members consistently throughout the model
+
   
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
