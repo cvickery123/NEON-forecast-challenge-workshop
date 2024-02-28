@@ -67,6 +67,7 @@ noaa_past_mean <- noaa_past |>
 
 noaa_past_mean$windspeed<-sqrt(noaa_past_mean$eastward_wind^2 + noaa_past_mean$northward_wind^2)
 
+
 ```
 
 ```{r get-NOAA-future, message = F}
@@ -149,7 +150,7 @@ derulotest2$airtemp_1daylag<-as.numeric(derulotest2$airtemp_1daylag)
 targets_lm <- targets |> 
   filter(variable == 'temperature') |>
   pivot_wider(names_from = 'variable', values_from = 'observation') |> 
-  left_join(derulotest2, 
+  right_join(derulotest2, 
             by = c("datetime","site_id"))
 
 ```
@@ -158,43 +159,96 @@ targets_lm <- targets |>
 
 forecast_horizon <- 30
 forecast_dates <- seq(from = ymd(forecast_date), to = ymd(forecast_date) + forecast_horizon, by = "day")
-n_members <- 31
+n_members <- 30
 
 forecast_df <- NULL
 ###NEXT STEP: REMOVE NAs FROM MOD WITHOUT CREATING ALL NAs
 for(i in 1:length(lake_sites$field_site_id)) {  
   
-  curr_site <- lake_sites$field_site_id[i]
-  
+  #curr_site <- lake_sites$field_site_id[i]
+  curr_site<-"BARC"
   # Get only the necessary data for the specific site
   site_target <- targets_lm |>
     filter(site_id == curr_site,
-           datetime <= ymd(forecast_date))
+           datetime <= ymd(forecast_date),
+           is.na(parameter))
+  
+  site_target2<- site_target  %>% 
+  arrange(site_id, parameter, datetime) %>% 
+  group_by(site_id, parameter) %>%
+  mutate(watertemp_1daylag = lag(temperature))
 
   noaa_future_site <- derulotest2 |> 
     filter(site_id == curr_site,
            datetime >= ymd(forecast_date), 
-           parameter != is.na(parameter)) 
+           parameter != is.na(parameter)) %>%
+  mutate(watertemp_1daylag = NA)
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
-  fit <- lm(site_target$temperature ~ site_target$airtemp_1daylag + site_target$relative_humidity)
+  fit <- lm(site_target2$temperature ~ site_target2$airtemp_1daylag + site_target2$relative_humidity + site_target2$watertemp_1daylag)
     
   #parameter uncertainty  
   summary_fit<-summary(fit)
 coeffs <- round(fit$coefficients, 3)
 
 params_se <- summary_fit$coefficients[,2]
-#IN-CLASS EXPLANATION: we want these to be different for each site but the same throughout the forecast horizon. That is why these lines are within the first for loop but outside the second. 
+
 param_df <- data.frame(beta1 = rnorm(n_members, coeffs[1], params_se[1]),
                        beta2 = rnorm(n_members, coeffs[2], params_se[2]),
-                       beta3 = rnorm(n_members, coeffs[3], params_se[3]))
+                       beta3 = rnorm(n_members, coeffs[3], params_se[3]), 
+                       beta4 = rnorm(n_members, coeffs[4]))
 
 #process uncertainty
-mod <- predict(fit, site_target)
-residuals <- mod - site_target$temperature
+mod <- predict(fit, site_target2)
+residuals <- mod - site_target2$temperature
 
 sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this is your sigma
-  
+
+#attempt to backcast
+site_target2_todaylag<-site_target2  %>% filter(temperature!=is.na(temperature)) %>%  slice(which.max(as.Date(datetime, '%m/%d/%Y')))
+
+backcast_dates<-seq(from = ymd(site_target2_todaylag$datetime) +1, to = ymd(forecast_date), by = "day")
+
+
+site_target2$rownumber<-c(1:nrow(site_target2))
+
+
+  if (site_target2_todaylag$watertemp_1daylag!=Sys.Date()) {
+    for (j in 1:length(backcast_dates)){
+      
+      site_drivers_back <- site_target2 %>%
+    filter(datetime == backcast_dates[j])
+      
+      currentrow<-site_target2 %>%
+    filter(datetime == backcast_dates[j]) %>% 
+        select(c("rownumber", "site_id", "parameter"))
+      
+      backcast_temp <- fit$coefficients[1] + 
+        fit$coefficients[2] * site_drivers_back$airtemp_1daylag +
+        site_drivers_back$relative_humidity * fit$coefficients[3] +
+        site_drivers_back$watertemp_1daylag * fit$coefficients[4]
+      
+      site_target2$temperature[currentrow$rownumber]=backcast_temp
+      
+      site_target2<- site_target2  %>% 
+        mutate(watertemp_1daylag = lag(temperature))
+    }
+  }
+
+firstfuture<-site_target2 %>% filter(datetime==Sys.Date()) %>% select(watertemp_1daylag, site_id, parameter)
+
+noaa_future_site$rownumber<-c(1:nrow(noaa_future_site))
+
+currentrow2<-noaa_future_site %>%
+    filter(datetime == Sys.Date()) %>% 
+        select(c("rownumber", "site_id", "parameter"))
+currentrow2<-as.vector(currentrow2$rownumber)
+
+for(v in currentrow2){
+  noaa_future_site$watertemp_1daylag[v]=firstfuture$watertemp_1daylag
+}
+
+
   # Loop through all forecast dates
   for (t in 1:length(forecast_dates)) {
   
@@ -203,9 +257,16 @@ sigma <- sd(residuals, na.rm = TRUE) # Process Uncertainty Noise Std Dev.; this 
     filter(datetime == forecast_dates[t])
   
   # use linear regression to forecast water temperature for each ensemble member
-  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + rnorm(n_members, mean = 0, sd = sigma)
+  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + site_drivers$watertemp_1daylag * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
+##CAN I PREDICT THE FORECASTED TEMPERATURES USING THE OTHER VARIABLES, THEN CREATE A SECOND FORECAST USING THE LAGGED WATER TEMPERATURE?
+  #I have 30 forecasted temperatures for one date with 30 parameters. I need to select those 30 rows from noaa_futre_site and insert those 30 forecasted temperatures. 
 
-  
+noaa_future_site<-noaa_future_site %>%
+  arrange(datetime, parameter) %>%
+  if (datetime== forecast_dates[t]) {
+    mutate(watertemp_1daylag == forecasted_temperature)
+  }
+
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
                          site_id = curr_site,
@@ -244,3 +305,5 @@ forecast_df_EFI |>
   facet_wrap(~site_id) +
   labs(title = paste0('Forecast generated for ', forecast_df_EFI$variable[1], ' on ', forecast_df_EFI$reference_datetime[1]))
 ```
+
+WRITE TEXT DESCRIPTION OF WHAT YOU DID DOWN HERE
