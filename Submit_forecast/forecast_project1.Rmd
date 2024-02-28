@@ -228,7 +228,7 @@ site_target2$rownumber<-c(1:nrow(site_target2))
         site_drivers_back$relative_humidity * fit$coefficients[3] +
         site_drivers_back$watertemp_1daylag * fit$coefficients[4]
       
-      site_target2$temperature[currentrow$rownumber]=backcast_temp
+      site_target2$temperature[currentrow$rownumber]<-backcast_temp
       
       site_target2<- site_target2  %>% 
         mutate(watertemp_1daylag = lag(temperature))
@@ -245,28 +245,33 @@ currentrow2<-noaa_future_site %>%
 currentrow2<-as.vector(currentrow2$rownumber)
 
 for(v in currentrow2){
-  noaa_future_site$watertemp_1daylag[v]=firstfuture$watertemp_1daylag
-}
+  noaa_future_site$watertemp_1daylag[v]<-firstfuture$watertemp_1daylag
+} ###THIS IS NOT FILLING IN ALL THE ROWS, JUST THE FIRST. NEED TO INSERT THESE VALUES INTO ALL ROWS 
 
 
   # Loop through all forecast dates
   for (t in 1:length(forecast_dates)) {
   
   #pull driver ensemble for the relevant date; here we are using all 30 NOAA ensemble members
+    noaa_future_site$temp_prediction<-NA
+    
   site_drivers <- noaa_future_site %>%
-    filter(datetime == forecast_dates[t])
+    filter(datetime == forecast_dates[t]) 
   
   # use linear regression to forecast water temperature for each ensemble member
   forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + site_drivers$watertemp_1daylag * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
 ##CAN I PREDICT THE FORECASTED TEMPERATURES USING THE OTHER VARIABLES, THEN CREATE A SECOND FORECAST USING THE LAGGED WATER TEMPERATURE?
   #I have 30 forecasted temperatures for one date with 30 parameters. I need to select those 30 rows from noaa_futre_site and insert those 30 forecasted temperatures. 
 
-noaa_future_site<-noaa_future_site %>%
-  arrange(datetime, parameter) %>%
-  if (datetime== forecast_dates[t]) {
-    mutate(watertemp_1daylag == forecasted_temperature)
-  }
+  currentrow3<-site_drivers$rownumber
+  
+for(m in currentrow3){
+  noaa_future_site$temp_prediction[m]<-forecasted_temperature
+}
 
+  #feeds the next for loop run
+  noaa_future_site<- noaa_future_site  %>% 
+        mutate(watertemp_1daylag = lag(temp_prediction))
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
                          site_id = curr_site,
