@@ -102,10 +102,8 @@ jasontest<-combined_met_df1 %>%
   arrange(site_id, parameter, datetime) %>% 
   group_by(site_id, parameter) %>%
   mutate(airtemp_1daylag = lag(air_temperature)) #correct way to lag 
-jasontest$datetimeplus1<-jasontest$datetime + days(1)
-colnames(jasontest)<-c("airtemp_1daylag", "realdatetime", "site_id", "parameter",  "datetime")
-view(jasontest)
-derulotest<-left_join(combined_met_df1, jasontest, by=c("datetime", "site_id", "parameter")) 
+jasontest$datetime_lagged<-jasontest$datetime - days(1)
+derulotest<-jasontest
 
 #filling in the gaps - Sys.Date data is missing airtemp_1daylag
 cyrus_df<-NULL
@@ -114,33 +112,30 @@ cyrus_df<-NULL
 for(i in 1:length(lake_sites$field_site_id)){
   curr_site <- lake_sites$field_site_id[i]
   
-  currentrow<-derulotest %>% filter(datetime==Sys.Date(), site_id==curr_site,
-                                    airtemp_1daylag!=is.na(airtemp_1daylag))
+  currentrow<-derulotest %>% filter(datetime==Sys.Date(),
+                site_id==curr_site,
+                airtemp_1daylag!=is.na(airtemp_1daylag))
   
-  airtemptopaste<-currentrow$airtemp_1daylag
-  realdatetopaste<-currentrow$realdatetime
+  airtemptopaste<-currentrow$airtemp_1daylag #yesterday's measured air temp
 
   mileytest<-derulotest %>% filter(datetime==Sys.Date(),
                                  site_id==curr_site) %>% 
-    select(datetime, site_id, parameter, airtemp_1daylag, realdatetime)
+    select(datetime, site_id, parameter, airtemp_1daylag, datetime_lagged)
 
   party<-mileytest %>% filter(parameter>=0)
   
   party$airtemp_1daylag<-airtemptopaste
-  party$realdatetime<-realdatetopaste
+  #party$realdatetime<-realdatetopaste
   
   cyrus_df<-dplyr::bind_rows(party, cyrus_df)
 }
 
 
-derulotest2<-left_join(derulotest, cyrus_df, by=c("datetime", "site_id", "parameter")) 
+derulotest2<-left_join(derulotest, cyrus_df, by=c("datetime", "site_id", "parameter", "datetime_lagged")) 
 
 derulotest2<-derulotest2 %>% select(order(colnames(.))) %>% unite("airtemp_1daylag", airtemp_1daylag.x:airtemp_1daylag.y, na.rm = TRUE, remove = FALSE)
-derulotest2<-derulotest2 %>% unite("realdatetime", realdatetime.x:realdatetime.y, na.rm = TRUE, remove = FALSE)
 
-#derulotest2 %>% filter(datetime==Sys.Date()) %>% view()
-
-derulotest2<-derulotest2 %>% select(-c(airtemp_1daylag.x, airtemp_1daylag.y, realdatetime.x, realdatetime.y))
+derulotest2<-derulotest2 %>% select(-c(airtemp_1daylag.x, airtemp_1daylag.y))
 
 derulotest2$airtemp_1daylag<-as.numeric(derulotest2$airtemp_1daylag)
 ```
@@ -236,16 +231,16 @@ site_target2$rownumber<-c(1:nrow(site_target2))
   }
 
 firstfuture<-site_target2 %>% filter(datetime==Sys.Date()) %>% select(watertemp_1daylag, site_id, parameter)
-
+firstfuturetopaste<-firstfuture$watertemp_1daylag
 noaa_future_site$rownumber<-c(1:nrow(noaa_future_site))
 
 currentrow2<-noaa_future_site %>%
     filter(datetime == Sys.Date()) %>% 
-        select(c("rownumber", "site_id", "parameter"))
+        select(c("rownumber", "site_id", "parameter", "datetime"))
 currentrow2<-as.vector(currentrow2$rownumber)
 
 for(v in currentrow2){
-  noaa_future_site$watertemp_1daylag[v]<-firstfuture$watertemp_1daylag
+  noaa_future_site$watertemp_1daylag[v]<-firstfuturetopaste
 } ###THIS IS NOT FILLING IN ALL THE ROWS, JUST THE FIRST. NEED TO INSERT THESE VALUES INTO ALL ROWS 
 
 
@@ -260,18 +255,7 @@ for(v in currentrow2){
   
   # use linear regression to forecast water temperature for each ensemble member
   forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + site_drivers$watertemp_1daylag * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
-##CAN I PREDICT THE FORECASTED TEMPERATURES USING THE OTHER VARIABLES, THEN CREATE A SECOND FORECAST USING THE LAGGED WATER TEMPERATURE?
-  #I have 30 forecasted temperatures for one date with 30 parameters. I need to select those 30 rows from noaa_futre_site and insert those 30 forecasted temperatures. 
-
-  currentrow3<-site_drivers$rownumber
   
-for(m in currentrow3){
-  noaa_future_site$temp_prediction[m]<-forecasted_temperature
-}
-
-  #feeds the next for loop run
-  noaa_future_site<- noaa_future_site  %>% 
-        mutate(watertemp_1daylag = lag(temp_prediction))
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
                          site_id = curr_site,
@@ -280,6 +264,53 @@ for(m in currentrow3){
                          variable = "temperature") 
   
   forecast_df <- dplyr::bind_rows(forecast_df, curr_site_df)
+  
+  
+  
+  
+  
+##CAN I PREDICT THE FORECASTED TEMPERATURES USING THE OTHER VARIABLES, THEN CREATE A SECOND FORECAST USING THE LAGGED WATER TEMPERATURE?
+  #I have 30 forecasted temperatures for one date with 30 parameters. I need to select those 30 rows from noaa_futre_site and insert those 30 forecasted temperatures. 
+
+  #feeding the next loop run 
+  currentrow3<-as.vector(site_drivers$rownumber)
+  
+creatingspace<-NULL
+for(m in currentrow3){
+  current_noaa_future_site<-noaa_future_site %>%
+    filter(rownumber==m)
+  
+  creatingspace<-dplyr::bind_rows(current_noaa_future_site, creatingspace)
+  #noaa_future_site$temp_prediction[m]<-forecasted_temperature
+}
+
+filledspace<-NULL
+for(u in 1:nrow(curr_site_df)){
+  forecasttopaste<-curr_site_df$prediction[u]
+  parameterforfilter<-curr_site_df$parameter[u]
+  
+  creatingspace2<-creatingspace %>%  filter(parameter==parameterforfilter) 
+    creatingspace2$temp_prediction<-forecasttopaste
+  
+  filledspace<-dplyr::bind_rows(filledspace, creatingspace2)
+    }
+
+binders<-noaa_future_site %>% select(-c(temp_prediction)) %>% colnames()
+
+noaa_future_site<-left_join(noaa_future_site, filledspace, 
+                            by=binders)
+
+noaa_future_site<-noaa_future_site %>% select(order(colnames(.))) %>% unite("temp_prediction", temp_prediction.x:temp_prediction.y, na.rm = TRUE, remove = FALSE)
+
+noaa_future_site<-noaa_future_site %>% select(-c(temp_prediction.x, temp_prediction.y))
+
+noaa_future_site$temp_prediction<-as.numeric(noaa_future_site$temp_prediction)
+
+   noaa_future_site<- noaa_future_site  %>% 
+         mutate(watertemp_1daylag = lag(temp_prediction))
+  
+  
+
   
   }
   
