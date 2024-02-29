@@ -186,7 +186,7 @@ for(i in 1:length(lake_sites$field_site_id)) {
   noaa_future_site$rownumber<-1:nrow(noaa_future_site)
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
-  fit <- lm(site_target2$temperature ~ site_target2$relative_humidity + site_target2$watertemp_1daylag + site_target2$windspeed + site_target2$airtemp_1daylag)
+  fit <- lm(site_target2$temperature ~ site_target2$air_temperature + site_target2$watertemp_1daylag + site_target2$windspeed)
     
   #parameter uncertainty  
   summary_fit<-summary(fit)
@@ -197,8 +197,7 @@ params_se <- summary_fit$coefficients[,2]
 param_df <- data.frame(beta1 = rnorm(n_members, coeffs[1], params_se[1]),
                        beta2 = rnorm(n_members, coeffs[2], params_se[2]),
                        beta3 = rnorm(n_members, coeffs[3], params_se[3]), 
-                       beta4 = rnorm(n_members, coeffs[4], params_se[4]), 
-                       beta5 = rnorm(n_members, coeffs[5], params_se[5]))
+                       beta4 = rnorm(n_members, coeffs[4], params_se[4]))
 
 #process uncertainty
 mod <- predict(fit, site_target2)
@@ -223,14 +222,14 @@ backcast_dates<-seq(from = ymd(site_target2_todaylag$datetime) +1, to = ymd(fore
         select(c("rownumber", "site_id", "parameter"))
       
       backcast_temp <- fit$coefficients[1] + 
-        fit$coefficients[2] * site_drivers_back$relative_humidity +  fit$coefficients[3] * site_drivers_back$watertemp_1daylag + fit$coefficients[4] * site_drivers_back$windspeed + fit$coefficients[5] * site_drivers_back$airtemp_1daylag
+        fit$coefficients[2] * site_drivers_back$air_temperature +  fit$coefficients[3] * site_drivers_back$watertemp_1daylag + fit$coefficients[4] * site_drivers_back$windspeed
       
       site_target2$temperature[currentrow$rownumber]<-backcast_temp
       
       site_target2<- site_target2  %>% 
         mutate(watertemp_1daylag = lag(temperature))
     }
-    message('backcast for ', curr_site, ' run flawlessly *chefs kiss*')
+    message('backcast for ', curr_site, ' run')
   }
 
 firstfuture<-site_target2 %>% filter(datetime==Sys.Date()) %>% select(watertemp_1daylag, site_id, parameter)
@@ -256,7 +255,7 @@ filledspace<-NULL
     filter(datetime == forecast_dates[t]) 
   
   # use linear regression to forecast water temperature for each ensemble member
-  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$relative_humidity + param_df$beta3 * site_drivers$watertemp_1daylag + param_df$beta4 * site_drivers$windspeed + param_df$beta5 * site_drivers$airtemp_1daylag + rnorm(n_members, mean = 0, sd = sigma)
+  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + param_df$beta3 * site_drivers$watertemp_1daylag + param_df$beta4 * site_drivers$windspeed + rnorm(n_members, mean = 0, sd = sigma)
 
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
@@ -312,9 +311,8 @@ for(v in currentrow2.vec){
 
      }
 
-  message(curr_site, 'forecast run and praise the Lord')
+  message(curr_site, 'forecast run')
 }
-summary_RH.WTL.WS.ATL<-summary_fit
 ```
 
 ```{r make-standard}
@@ -340,4 +338,38 @@ forecast_df_EFI |>
   labs(title = paste0('Forecast generated for ', forecast_df_EFI$variable[1], ' on ', forecast_df_EFI$reference_datetime[1]))
 ```
 
-WRITE TEXT DESCRIPTION OF WHAT YOU DID DOWN HERE
+```{r write-forecast}
+# Write the forecast to file
+theme <- 'aquatics'
+date <- forecast_df_EFI$reference_datetime[1]
+forecast_name_1 <- paste0(forecast_df_EFI$model_id[1], ".csv")
+forecast_file_1 <- paste(theme, date, forecast_name_1, sep = '-')
+forecast_file_1
+
+
+if (!dir.exists('Forecasts')) {
+  dir.create('Forecasts')
+}
+
+write_csv(forecast_df_EFI, file.path('Forecasts',forecast_file_1))
+
+neon4cast::forecast_output_validator(file.path('Forecasts',forecast_file_1))
+
+```
+
+```{r submit-forecast}
+
+## # can uses the neon4cast::forecast_output_validator() to check the forecast is in the right format
+
+# UNCOMMMENT THIS WHEN YOU ARE READY TO SUBMIT
+#neon4cast::submit(forecast_file = file.path('Forecasts', forecast_file_1),                   ask = T) # if ask = T (default), it will produce a pop-up box asking if you want to submit
+
+```
+
+This forecast of water temperature at NEON Lake sites uses a linear model, incorporating air temperature, wind speed, and the previous day's forecasted water temperature as variables. Air temperature is incorporated from NEON's data and forecast. Wind speed is calculated based on eastern and northern wind speeds from NEON's data and forecast. I used the Pythagorean theorem to calculate wind speed based on eastern and northern wind speed. 
+
+Calculating the water temperature lag required first a backcast of water temperature from the last recorded water temperature from NEON. I used the same model coefficients fitted to the original data to forecast water temperature to present day without uncertainty. This backcasting incorporates initial condition uncertainty to the water temperature forecast. 
+
+In addition to initial condition uncertainty, the linear model forecast incorporates process uncertainty, parameter uncertainty, and driver uncertainty. I used the linear model fit to estimate the noise standard deviation and process uncertainty. I used the linear model fit to generate 30 parameters based to include parameter uncertainty. Lagged water temperature is calculated in the forecast according to parameter, for each date and for each site. This forecast also includes driver uncertainty, as I am using variables to build my forecast. 
+
+This forecast uses air temperature, wind speed, and 1-day lagged water temperature. I chose these drivers after also considering relative humidity and 1-day lagged air temperature. After trying every combination of these variables in different linear models fit to the target data, the combination of air temperature, wind speed, and lagged water temperature produced the model with the highest R^2 value (0.9882). When I added relative humidity to the model, relative humidity was an insignificant driver. Models with lagged air temperature had lower R^2 values compared to models with unlagged air temperature. Adding lagged water temperature improved the R^2 for the model and, therefore, improved the forecast. 
