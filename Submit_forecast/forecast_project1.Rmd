@@ -259,16 +259,16 @@ filledspace<-NULL
   
   # use linear regression to forecast water temperature for each ensemble member
   forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + site_drivers$relative_humidity * param_df$beta3 + site_drivers$watertemp_1daylag * param_df$beta4 + rnorm(n_members, mean = 0, sd = sigma)
-  
+
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
                          site_id = curr_site,
                          parameter = 1:n_members,
                          prediction = forecasted_temperature,
                          variable = "temperature") 
-  
+
   forecast_df <- dplyr::bind_rows(forecast_df, curr_site_df)
-  
+
   
 ##CAN I PREDICT THE FORECASTED TEMPERATURES USING THE OTHER VARIABLES, THEN CREATE A SECOND FORECAST USING THE LAGGED WATER TEMPERATURE?
   #I have 30 forecasted temperatures for one date with 30 parameters. I need to select those 30 rows from noaa_futre_site and insert those 30 forecasted temperatures. 
@@ -287,34 +287,33 @@ filledspace<-NULL
 for(u in 1:nrow(curr_site_df)){
   forecasttopaste<-curr_site_df$prediction[u]
   parameterforfilter<-curr_site_df$parameter[u]
-  
+
   creatingspace2<-noaa_future_site %>%
     filter(datetime==forecast_dates[t],
            parameter==parameterforfilter) 
-  
+
   creatingspace2$temp_prediction<-forecasttopaste
-  
+
   filledspace<-dplyr::bind_rows(filledspace, creatingspace2)
 }
   
-##PROBLEM AREA!!
+message('space has been filled for ', forecast_dates[t])
+
 binders<-noaa_future_site %>% select(-c(temp_prediction)) %>% colnames()
-binders2<-c("datetime", "datetime_lagged", "parameter", "site_id")
 noaa_future_site<-left_join(noaa_future_site, filledspace, 
                             by=binders)
 
-noaa_future_site<-noaa_future_site %>% select(order(colnames(.))) %>% unite("temp_prediction", temp_prediction.x:temp_prediction.y, na.rm = TRUE, remove = FALSE)
+noaa_future_site$temp_prediction <- ifelse(is.na(noaa_future_site$temp_prediction.x), noaa_future_site$temp_prediction.y, noaa_future_site$temp_prediction.x)
+
+# noaa_future_site<-noaa_future_site %>% select(order(colnames(.))) %>% unite("temp_prediction", temp_prediction.x:temp_prediction.y, na.rm = TRUE, remove = FALSE)
 
 noaa_future_site<-noaa_future_site %>% select(-c(temp_prediction.x, temp_prediction.y))
-
+message('check8')
 noaa_future_site$temp_prediction<-as.numeric(noaa_future_site$temp_prediction)
-
+message('check9')
    noaa_future_site<- noaa_future_site  %>% 
          mutate(watertemp_1daylag = lag(temp_prediction))
-  
-  
 
-  
   }
   
   message(curr_site, 'forecast run')
