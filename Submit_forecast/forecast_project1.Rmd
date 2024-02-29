@@ -318,7 +318,7 @@ for(v in currentrow2.vec){
 ```{r make-standard}
 # Make forecast fit the EFI standards
 # Remember to change the model_id when you make changes to the model structure!
-my_model_id <- 'Vickery_project1'
+my_model_id <- 'lm_AT_WTL_WS'
 
 forecast_df_EFI <- forecast_df %>%
   filter(datetime > forecast_date) %>%
@@ -362,14 +362,14 @@ neon4cast::forecast_output_validator(file.path('Forecasts',forecast_file_1))
 ## # can uses the neon4cast::forecast_output_validator() to check the forecast is in the right format
 
 # UNCOMMMENT THIS WHEN YOU ARE READY TO SUBMIT
-#neon4cast::submit(forecast_file = file.path('Forecasts', forecast_file_1),                   ask = T) # if ask = T (default), it will produce a pop-up box asking if you want to submit
+neon4cast::submit(forecast_file = file.path('Forecasts', forecast_file_1),                   ask = F) # if ask = T (default), it will produce a pop-up box asking if you want to submit
 
 ```
 
-This forecast of water temperature at NEON Lake sites uses a linear model, incorporating air temperature, wind speed, and the previous day's forecasted water temperature as variables. Air temperature is incorporated from NEON's data and forecast. Wind speed is calculated based on eastern and northern wind speeds from NEON's data and forecast. I used the Pythagorean theorem to calculate wind speed based on eastern and northern wind speed. 
+This forecast of water temperature at NEON Lake sites uses a linear model, incorporating air temperature, wind speed, and the previous day's forecasted water temperature as variables. Air temperature is incorporated from NEON's data and forecast. Wind speed is calculated based on eastern and northern wind speeds from NEON's data and forecast. I used the Pythagorean theorem to calculate wind speed based on the directional wind vectors. 
 
-Calculating the water temperature lag required first a backcast of water temperature from the last recorded water temperature from NEON. I used the same model coefficients fitted to the original data to forecast water temperature to present day without uncertainty. This backcasting incorporates initial condition uncertainty to the water temperature forecast. 
+Calculating the water temperature lag required first a backcast of water temperature from the last recorded water temperature from NEON. I used the same model coefficients fitted to the original data to forecast water temperature to present day without uncertainty. This backcasting incorporates initial condition uncertainty to the water temperature forecast, even though the forecast starts with only one initial condition. 
 
-In addition to initial condition uncertainty, the linear model forecast incorporates process uncertainty, parameter uncertainty, and driver uncertainty. I used the linear model fit to estimate the noise standard deviation and process uncertainty. I used the linear model fit to generate 30 parameters based to include parameter uncertainty. Lagged water temperature is calculated in the forecast according to parameter, for each date and for each site. This forecast also includes driver uncertainty, as I am using variables to build my forecast. 
+In addition to initial condition uncertainty, the linear model forecast incorporates process uncertainty, parameter uncertainty, and driver uncertainty. I used the linear model fit to estimate the standard deviation, which accounts for process uncertainty in how the data is represented. I used the linear model fit to generate 30 parameters based to include parameter uncertainty. Lagged water temperature is calculated in the forecast according to parameter, for each date and for each site. This forecast also includes driver uncertainty, as I am using variables to build my forecast. 
 
-This forecast uses air temperature, wind speed, and 1-day lagged water temperature. I chose these drivers after also considering relative humidity and 1-day lagged air temperature. After trying every combination of these variables in different linear models fit to the target data, the combination of air temperature, wind speed, and lagged water temperature produced the model with the highest R^2 value (0.9882). When I added relative humidity to the model, relative humidity was an insignificant driver. Models with lagged air temperature had lower R^2 values compared to models with unlagged air temperature. Adding lagged water temperature improved the R^2 for the model and, therefore, improved the forecast. 
+This forecast uses air temperature, wind speed, and 1-day lagged water temperature as variables. I chose these drivers after also considering relative humidity and 1-day lagged air temperature. After trying every combination of these variables in different linear models fit to the target data, the combination of air temperature, wind speed, and lagged water temperature produced the model with the highest R^2 value (0.9882). When I added relative humidity to the model, relative humidity was an insignificant driver. Models with lagged air temperature had lower R^2 values compared to models with unlagged air temperature. Adding lagged water temperature improved the R^2 for the model and, therefore, improved the forecast. 
