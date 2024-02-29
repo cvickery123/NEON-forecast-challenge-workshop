@@ -152,17 +152,17 @@ targets_lm <- targets |>
 
 ```{r forecast-loop with uncertainty}
 
-forecast_horizon <- 10
+forecast_horizon <- 30
 forecast_dates <- seq(from = ymd(forecast_date), to = ymd(forecast_date) + forecast_horizon, by = "day")
 n_members <- 30
 
 forecast_df <- NULL
-###NEXT STEP: REMOVE NAs FROM MOD WITHOUT CREATING ALL NAs
-testsite<-"BARC"
-for(i in testsite) {  
+
+
+for(i in 1:length(lake_sites$field_site_id)) {  
   
-  curr_site <- i
-  # curr_site<-"BARC"
+  curr_site <- lake_sites$field_site_id[i]
+
   # Get only the necessary data for the specific site
   site_target <- targets_lm |>
     filter(site_id == curr_site,
@@ -231,7 +231,7 @@ backcast_dates<-seq(from = ymd(site_target2_todaylag$datetime) +1, to = ymd(fore
       site_target2<- site_target2  %>% 
         mutate(watertemp_1daylag = lag(temperature))
       
-      message('backcast ',backcast_dates[j], 'for ', curr_site, 'running flawlessly *chefs kiss*')
+      message('backcast ',backcast_dates[j], ' for ', curr_site, ' running flawlessly *chefs kiss*')
     }
   }
 
@@ -246,7 +246,7 @@ currentrow2.vec<-as.vector(currentrow2$rownumber)
 
 for(v in currentrow2.vec){
   noaa_future_site$watertemp_1daylag[v]<-firstfuturetopaste
-} ###THIS IS NOT FILLING IN ALL THE ROWS, JUST THE FIRST. NEED TO INSERT THESE VALUES INTO ALL ROWS 
+} 
 
 creatingspace<-NULL
 filledspace<-NULL
@@ -269,21 +269,8 @@ filledspace<-NULL
 
   forecast_df <- dplyr::bind_rows(forecast_df, curr_site_df)
 
-  
-##CAN I PREDICT THE FORECASTED TEMPERATURES USING THE OTHER VARIABLES, THEN CREATE A SECOND FORECAST USING THE LAGGED WATER TEMPERATURE?
-  #I have 30 forecasted temperatures for one date with 30 parameters. I need to select those 30 rows from noaa_futre_site and insert those 30 forecasted temperatures. 
 
-  #feeding the next loop run 
-#   currentrow3<-as.vector(site_drivers$rownumber)
-#   
-# for(m in currentrow3){
-#   current_noaa_future_site<-noaa_future_site %>%
-#     filter(rownumber==m)
-#   
-#   creatingspace<-dplyr::bind_rows(current_noaa_future_site, creatingspace)
-# }
-
-
+  #feeding the next loop run
 for(u in 1:nrow(curr_site_df)){
   forecasttopaste<-curr_site_df$prediction[u]
   parameterforfilter<-curr_site_df$parameter[u]
@@ -296,8 +283,6 @@ for(u in 1:nrow(curr_site_df)){
 
   filledspace<-dplyr::bind_rows(filledspace, creatingspace2)
 }
-  
-message('space has been filled for ', forecast_dates[t])
 
 binders<-noaa_future_site %>% select(-c(temp_prediction)) %>% colnames()
 noaa_future_site<-left_join(noaa_future_site, filledspace, 
@@ -305,18 +290,31 @@ noaa_future_site<-left_join(noaa_future_site, filledspace,
 
 noaa_future_site$temp_prediction <- ifelse(is.na(noaa_future_site$temp_prediction.x), noaa_future_site$temp_prediction.y, noaa_future_site$temp_prediction.x)
 
-# noaa_future_site<-noaa_future_site %>% select(order(colnames(.))) %>% unite("temp_prediction", temp_prediction.x:temp_prediction.y, na.rm = TRUE, remove = FALSE)
-
 noaa_future_site<-noaa_future_site %>% select(-c(temp_prediction.x, temp_prediction.y))
-message('check8')
+
 noaa_future_site$temp_prediction<-as.numeric(noaa_future_site$temp_prediction)
-message('check9')
+
    noaa_future_site<- noaa_future_site  %>% 
          mutate(watertemp_1daylag = lag(temp_prediction))
 
-  }
-  
-  message(curr_site, 'forecast run')
+   backfill<-noaa_future_site %>%
+    filter(datetime == Sys.Date())
+   
+   
+   if(is.na(noaa_future_site$watertemp_1daylag[1])){
+     currentrow2<-noaa_future_site %>%
+    filter(datetime == Sys.Date()) %>% 
+        select(c("rownumber", "site_id", "parameter", "datetime"))
+currentrow2.vec<-as.vector(currentrow2$rownumber)
+
+for(v in currentrow2.vec){
+  noaa_future_site$watertemp_1daylag[v]<-firstfuturetopaste
+} 
+   }
+
+     }
+
+  message(curr_site, 'forecast run and praise the Lord')
 }
 
 ```
