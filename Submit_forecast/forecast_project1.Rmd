@@ -186,7 +186,7 @@ for(i in 1:length(lake_sites$field_site_id)) {
   noaa_future_site$rownumber<-1:nrow(noaa_future_site)
   
   #Fit linear model based on past data: water temperature = m * air temperature + b
-  fit <- lm(site_target2$temperature ~ site_target2$airtemp_1daylag + site_target2$watertemp_1daylag)
+  fit <- lm(site_target2$temperature ~ site_target2$air_temperature + site_target2$watertemp_1daylag)
     
   #parameter uncertainty  
   summary_fit<-summary(fit)
@@ -221,7 +221,7 @@ backcast_dates<-seq(from = ymd(site_target2_todaylag$datetime) +1, to = ymd(fore
         select(c("rownumber", "site_id", "parameter"))
       
       backcast_temp <- fit$coefficients[1] + 
-        fit$coefficients[2] * site_drivers_back$airtemp_1daylag +  fit$coefficients[3] * site_drivers_back$watertemp_1daylag 
+        fit$coefficients[2] * site_drivers_back$air_temperature +  fit$coefficients[3] * site_drivers_back$watertemp_1daylag 
       
       site_target2$temperature[currentrow$rownumber]<-backcast_temp
       
@@ -254,7 +254,7 @@ filledspace<-NULL
     filter(datetime == forecast_dates[t]) 
   
   # use linear regression to forecast water temperature for each ensemble member
-  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$airtemp_1daylag + param_df$beta3 * site_drivers$watertemp_1daylag + rnorm(n_members, mean = 0, sd = sigma)
+  forecasted_temperature <- param_df$beta1 + param_df$beta2 * site_drivers$air_temperature + param_df$beta3 * site_drivers$watertemp_1daylag + rnorm(n_members, mean = 0, sd = sigma)
 
   # put all the relevant information into a tibble that we can bind together
   curr_site_df <- tibble(datetime = rep(forecast_dates[t], times = n_members),
@@ -312,7 +312,7 @@ for(v in currentrow2.vec){
 
   message(curr_site, 'forecast run and praise the Lord')
 }
-
+summary_AT.WTL<-summary_fit
 ```
 
 ```{r make-standard}
